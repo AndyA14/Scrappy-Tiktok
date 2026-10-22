@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Scrappy TikTok - Analytics & Big Five Personality Engine</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Estilos personalizados -->
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body class="min-h-screen text-slate-100 p-4 sm:p-8 flex flex-col justify-between">
+
+    <!-- CONTENEDOR PRINCIPAL -->
+    <div class="max-w-6xl mx-auto w-full space-y-8">
+
+        <!-- BARRA DE NAVEGACIÓN SUPERIOR -->
+        <header class="flex items-center justify-between border-b border-slate-800/80 pb-5">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-pink-600 via-red-500 to-cyan-400 p-0.5 flex items-center justify-center shadow-lg shadow-pink-500/20">
+                    <span class="text-xl font-black text-white">⚡</span>
+                </div>
+                <div>
+                    <h1 class="text-xl font-bold tracking-tight text-white flex items-center gap-2">
+                        Scrappy TikTok <span class="text-[10px] uppercase font-mono px-2 py-0.5 bg-gradient-to-r from-pink-500/20 to-cyan-500/20 border border-cyan-500/30 text-cyan-300 rounded">v2.0</span>
+                    </h1>
+                    <p class="text-xs text-slate-400">Scraping de Creadores, Rasgos Big Five & Análisis Multimodal</p>
+                </div>
+            </div>
+
+            <!-- Estado de IA y Botón de Ajustes -->
+            <div class="flex items-center gap-3">
+                <div id="aiStatusBadge" class="px-3 py-1 rounded-full text-xs font-semibold bg-slate-800 text-slate-400 border border-slate-700 flex items-center gap-1.5">
+                    <span class="w-2 h-2 rounded-full bg-slate-500"></span> Conectando...
+                </div>
+                <button id="settingsBtn" title="Configurar API Key de Gemini" class="px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800 hover:border-slate-700 text-xs font-medium text-slate-300 hover:text-white transition flex items-center gap-1.5">
+                    ⚙️ <span class="hidden sm:inline">Configuración</span>
+                </button>
+            </div>
+        </header>
+
+        <!-- SECCIÓN DE BÚSQUEDA / HERO -->
+        <section class="text-center max-w-2xl mx-auto pt-4">
+            <h2 class="text-3xl sm:text-4xl font-extrabold bg-gradient-to-r from-pink-500 via-rose-400 to-cyan-400 bg-clip-text text-transparent mb-3">
+                Perfil Psicológico y Métricas de TikTok
+            </h2>
+            <p class="text-sm text-slate-400 mb-6 leading-relaxed">
+                Extrae publicaciones, interacciones y comentarios de cualquier cuenta de TikTok para descubrir su perfil en el modelo <strong class="text-slate-200">Big Five (OCEAN)</strong> y evaluar el impacto emocional de su contenido.
+            </p>
+
+            <form id="searchForm" class="flex flex-col sm:flex-row gap-2.5 max-w-lg mx-auto">
+                <div class="relative flex-1">
+                    <span class="absolute inset-y-0 left-3 flex items-center text-slate-500 font-mono text-sm">@</span>
+                    <input 
+                        type="text" 
+                        id="usernameInput" 
+                        placeholder="usuario (ej: aceog14, tiktok, fcbarcelona)" 
+                        required
+                        class="w-full pl-8 pr-4 py-2.5 rounded-xl bg-slate-900/90 border border-slate-800 text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400 text-sm transition"
+                    />
+                </div>
+
+                <select id="maxVideosSelect" class="bg-slate-900 border border-slate-800 text-slate-300 text-xs rounded-xl px-3 py-2.5 focus:outline-none focus:border-cyan-400">
+                    <option value="10" selected>10 Videos</option>
+                    <option value="5">5 Videos (Rápido)</option>
+                    <option value="15">15 Videos</option>
+                </select>
+
+                <button 
+                    type="submit" 
+                    id="submitBtn"
+                    class="px-6 py-2.5 rounded-xl bg-gradient-to-r from-pink-600 via-rose-600 to-red-600 hover:from-pink-500 hover:to-red-500 font-semibold text-sm transition shadow-lg shadow-pink-600/20 whitespace-nowrap"
+                >
+                    Extraer y Analizar
+                </button>
+            </form>
+        </section>
+
+        <!-- ESTADO DE CARGA -->
+        <div id="loadingState" class="hidden text-center py-12 glass-panel rounded-2xl p-8 max-w-md mx-auto">
+            <div class="inline-block w-12 h-12 border-4 border-cyan-400 border-t-transparent rounded-full animate-spin mb-4"></div>
+            <h3 class="text-lg font-bold text-white mb-1">Extrayendo cuenta con Playwright...</h3>
+            <p class="text-slate-400 text-xs mb-3">Navegando al perfil, interceptando paquetes JSON y computando rasgos psicológicos.</p>
+            <div class="bg-slate-950/60 p-3 rounded-lg border border-slate-800 text-left text-xs text-slate-400 space-y-1 font-mono">
+                <div class="text-cyan-400">✓ Navegador Chromium iniciado</div>
+                <div>⏳ Recorriendo videos e interacciones...</div>
+                <div class="text-slate-500">○ Generando modelo de personalidad OCEAN</div>
+            </div>
+        </div>
+
+        <!-- CAJA DE ERRORES -->
+        <div id="errorBox" class="hidden bg-red-950/60 border border-red-700 text-red-200 px-5 py-3.5 rounded-xl text-center text-sm"></div>
+
+        <!-- CONTENEDOR DE RESULTADOS -->
+        <main id="resultsContainer" class="hidden space-y-8">
+
+            <!-- 1. TARJETA DE PERFIL -->
+            <section class="glass-panel rounded-2xl p-6 shadow-xl border border-slate-800/80">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-5 border-b border-slate-800 pb-5 mb-5">
+                    <div class="flex items-center gap-4">
+                        <div id="profileAvatarPlaceholder" class="w-14 h-14 rounded-2xl bg-gradient-to-br from-pink-500 to-cyan-500 flex items-center justify-center font-bold text-xl text-white shadow-md">
+                            TT
+                        </div>
+                        <img id="profileAvatar" src="" alt="Avatar" class="w-14 h-14 rounded-2xl object-cover border border-slate-700 hidden" />
+                        <div>
+                            <h2 id="profileName" class="text-2xl font-bold text-white"></h2>
+                            <p id="profileUsername" class="text-cyan-400 font-mono text-sm"></p>
+                            <p id="profileBio" class="text-xs text-slate-400 italic mt-1 hidden"></p>
+                        </div>
+                    </div>
+                    <a id="profileExternalLink" href="#" target="_blank" class="text-xs bg-slate-800/80 hover:bg-slate-700 border border-slate-700 px-4 py-2.5 rounded-xl text-slate-200 transition self-start sm:self-auto flex items-center gap-1.5">
+                        Ver perfil en TikTok ↗
+                    </a>
+                </div>
+
+                <!-- Métricas del Creador -->
+                <div class="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                    <div class="bg-slate-950/70 p-4 rounded-xl border border-slate-800/80">
+                        <span class="text-slate-400 text-xs uppercase tracking-wider block">Seguidores</span>
+                        <p id="profileFollowers" class="text-2xl font-black text-pink-500 mt-1"></p>
+                    </div>
+                    <div class="bg-slate-950/70 p-4 rounded-xl border border-slate-800/80">
+                        <span class="text-slate-400 text-xs uppercase tracking-wider block">Seguidos</span>
+                        <p id="profileFollowing" class="text-2xl font-black text-cyan-400 mt-1"></p>
+                    </div>
+                    <div class="col-span-2 sm:col-span-1 bg-slate-950/70 p-4 rounded-xl border border-slate-800/80">
+                        <span class="text-slate-400 text-xs uppercase tracking-wider block">Videos Analizados</span>
+                        <p id="videosCountBadge" class="text-2xl font-black text-purple-400 mt-1">0</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 2. ANÁLISIS DE PERSONALIDAD BIG FIVE (OCEAN) -->
+            <section class="glass-panel rounded-2xl p-6 sm:p-8 shadow-xl border border-slate-800/80 space-y-6">
+                
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-4">
+                    <div>
+                        <h3 class="text-2xl font-bold text-white flex items-center gap-2">
+                            <span>🧠</span> Rasgos de Personalidad: Modelo Big Five (OCEAN)
+                        </h3>
+                        <p class="text-xs text-slate-400 mt-0.5">
+                            Evaluación psicométrica inferida del comportamiento, lenguaje, narrativa y retroalimentación comunitaria.
+                        </p>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span id="modelUsedBadge" class="text-[11px] font-mono bg-purple-950/60 border border-purple-800/80 text-purple-300 px-3 py-1 rounded-full">
+                            Gemini AI
+                        </span>
+                        <button id="reanalyzeBtn" class="text-xs bg-slate-800 hover:bg-slate-700 text-slate-200 px-3 py-1.5 rounded-lg border border-slate-700 transition">
+                            ✨ Reanalizar
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Gráfico Radial + Barras de Rasgos -->
+                <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
+                    
+                    <!-- Columna Gráfico Radar (Spider Chart) -->
+                    <div class="lg:col-span-5 flex flex-col items-center justify-center">
+                        <h4 class="text-xs uppercase tracking-wider font-semibold text-slate-400 mb-2">Perfil Psicométrico Radial</h4>
+                        <div class="chart-container">
+                            <canvas id="bigFiveRadarChart"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- Columna de Barras y Explicación -->
+                    <div class="lg:col-span-7 space-y-4">
+                        
+                        <!-- Openness -->
+                        <div class="bg-slate-950/60 p-3.5 rounded-xl border border-slate-800/70">
+                            <div class="flex justify-between items-center mb-1">
+                                <span class="text-xs font-semibold text-cyan-400">Apertura a la Experiencia (Openness)</span>
+                                <div class="flex items-center gap-2">
+                                    <span id="opennessLevel" class="text-[11px] px-2 py-0.5 rounded font-semibold bg-cyan-500/20 text-cyan-300">Medio</span>
+                                    <span id="opennessScore" class="text-xs font-mono font-bold text-white">0%</span>
+                                </div>
+                            </div>
+                            <div class="w-full bg-slate-800 h-2 rounded-full overflow-hidden mb-1.5">
+                                <div id="opennessBar" class="h-full bg-cyan-400 rounded-full transition-all duration-1000" style="width: 0%"></div>
+                            </div>
+                            <p id="opennessSummary" class="text-xs text-slate-400"></p>
+                        </div>
+
+                        <!-- Conscientiousness -->
+                        <div class="bg-slate-950/60 p-3.5 rounded-xl border border-slate-800/70">
+                            <div class="flex justify-between items-center mb-1">
+                                <span class="text-xs font-semibold text-purple-400">Responsabilidad (Conscientiousness)</span>
+                                <div class="flex items-center gap-2">
+                                    <span id="conscientiousnessLevel" class="text-[11px] px-2 py-0.5 rounded font-semibold bg-purple-500/20 text-purple-300">Medio</span>
+                                    <span id="conscientiousnessScore" class="text-xs font-mono font-bold text-white">0%</span>
+                                </div>
+                            </div>
+                            <div class="w-full bg-slate-800 h-2 rounded-full overflow-hidden mb-1.5">
+                                <div id="conscientiousnessBar" class="h-full bg-purple-500 rounded-full transition-all duration-1000" style="width: 0%"></div>
+                            </div>
+                            <p id="conscientiousnessSummary" class="text-xs text-slate-400"></p>
+                        </div>
+
+                        <!-- Extraversion -->
+                        <div class="bg-slate-950/60 p-3.5 rounded-xl border border-slate-800/70">
+                            <div class="flex justify-between items-center mb-1">
+                                <span class="text-xs font-semibold text-pink-400">Extraversión (Extraversion)</span>
+                                <div class="flex items-center gap-2">
+                                    <span id="extraversionLevel" class="text-[11px] px-2 py-0.5 rounded font-semibold bg-pink-500/20 text-pink-300">Medio</span>
+                                    <span id="extraversionScore" class="text-xs font-mono font-bold text-white">0%</span>
+                                </div>
+                            </div>
+                            <div class="w-full bg-slate-800 h-2 rounded-full overflow-hidden mb-1.5">
+                                <div id="extraversionBar" class="h-full bg-pink-500 rounded-full transition-all duration-1000" style="width: 0%"></div>
+                            </div>
+                            <p id="extraversionSummary" class="text-xs text-slate-400"></p>
+                        </div>
+
+                        <!-- Agreeableness -->
+                        <div class="bg-slate-950/60 p-3.5 rounded-xl border border-slate-800/70">
+                            <div class="flex justify-between items-center mb-1">
+                                <span class="text-xs font-semibold text-emerald-400">Amabilidad (Agreeableness)</span>
+                                <div class="flex items-center gap-2">
+                                    <span id="agreeablenessLevel" class="text-[11px] px-2 py-0.5 rounded font-semibold bg-emerald-500/20 text-emerald-300">Medio</span>
+                                    <span id="agreeablenessScore" class="text-xs font-mono font-bold text-white">0%</span>
+                                </div>
+                            </div>
+                            <div class="w-full bg-slate-800 h-2 rounded-full overflow-hidden mb-1.5">
+                                <div id="agreeablenessBar" class="h-full bg-emerald-500 rounded-full transition-all duration-1000" style="width: 0%"></div>
+                            </div>
+                            <p id="agreeablenessSummary" class="text-xs text-slate-400"></p>
+                        </div>
+
+                        <!-- Neuroticism -->
+                        <div class="bg-slate-950/60 p-3.5 rounded-xl border border-slate-800/70">
+                            <div class="flex justify-between items-center mb-1">
+                                <span class="text-xs font-semibold text-amber-400">Estabilidad Emocional / Neuroticismo</span>
+                                <div class="flex items-center gap-2">
+                                    <span id="neuroticismLevel" class="text-[11px] px-2 py-0.5 rounded font-semibold bg-amber-500/20 text-amber-300">Bajo</span>
+                                    <span id="neuroticismScore" class="text-xs font-mono font-bold text-white">0%</span>
+                                </div>
+                            </div>
+                            <div class="w-full bg-slate-800 h-2 rounded-full overflow-hidden mb-1.5">
+                                <div id="neuroticismBar" class="h-full bg-amber-500 rounded-full transition-all duration-1000" style="width: 0%"></div>
+                            </div>
+                            <p id="neuroticismSummary" class="text-xs text-slate-400"></p>
+                        </div>
+
+                    </div>
+                </div>
+
+                <!-- Resumen Psicológico y Estilo -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t border-slate-800">
+                    <div class="bg-slate-950/50 p-4 rounded-xl border border-slate-800">
+                        <h4 class="text-xs font-bold uppercase tracking-wider text-cyan-400 mb-2">Resumen Psicométrico del Creador</h4>
+                        <p id="bigFiveGeneralSummary" class="text-xs text-slate-300 leading-relaxed"></p>
+                    </div>
+                    <div class="bg-slate-950/50 p-4 rounded-xl border border-slate-800">
+                        <h4 class="text-xs font-bold uppercase tracking-wider text-pink-400 mb-2">Estilo de Comunicación</h4>
+                        <p id="communicationStyleText" class="text-xs text-slate-300 leading-relaxed mb-3"></p>
+                        <h5 class="text-[11px] uppercase tracking-wider text-slate-400 font-semibold mb-2">Fortalezas Clave:</h5>
+                        <ul id="keyStrengthsList" class="flex flex-wrap gap-2"></ul>
+                    </div>
+                </div>
+
+            </section>
+
+            <!-- 3. SECCIÓN DE ANÁLISIS DE SENTIMIENTO & COMUNIDAD -->
+            <section class="glass-panel rounded-2xl p-6 sm:p-8 shadow-xl border border-slate-800/80 space-y-4">
+                <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+                    <div>
+                        <h3 class="text-xl font-bold text-white flex items-center gap-2">
+                            <span>💬</span> Análisis de Sensibilidad y Recepción Comunitaria
+                        </h3>
+                        <p class="text-xs text-slate-400">Polaridad emocional de las publicaciones y comentarios analizados.</p>
+                    </div>
+                    <span id="overallSentimentBadge" class="text-xs font-bold px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                        Positivo
+                    </span>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-12 gap-6 items-center">
+                    <div class="md:col-span-4 flex flex-col items-center">
+                        <div class="w-48 h-48">
+                            <canvas id="sentimentDoughnutChart"></canvas>
+                        </div>
+                    </div>
+                    <div class="md:col-span-8 space-y-3">
+                        <div class="bg-slate-950/60 p-4 rounded-xl border border-slate-800">
+                            <span class="text-xs uppercase tracking-wider text-slate-400 font-semibold block mb-1">Tono de la Comunidad</span>
+                            <p id="communityToneText" class="text-xs text-slate-300 leading-relaxed"></p>
+                        </div>
+                        <div class="bg-slate-950/60 p-4 rounded-xl border border-slate-800">
+                            <span class="text-xs uppercase tracking-wider text-slate-400 font-semibold block mb-2">Emociones Predominantes</span>
+                            <div id="dominantEmotionsList" class="flex flex-wrap gap-2"></div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 4. GRID DE VIDEOS EXTRAÍDOS -->
+            <section class="space-y-4">
+                <div class="flex items-center justify-between">
+                    <h3 class="text-xl font-bold text-white flex items-center gap-2">
+                        <span>🎬</span> Últimos Videos Extraídos
+                    </h3>
+                    <span class="text-xs text-slate-400">Haz clic en <strong>Analizar Video con IA</strong> para un desglose multimodal.</span>
+                </div>
+                <div id="videosGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"></div>
+            </section>
+
+        </main>
+    </div>
+
+    <!-- MODAL DE CONFIGURACIÓN DE GEMINI API KEY -->
+    <div id="settingsModal" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="glass-panel max-w-md w-full rounded-2xl p-6 border border-slate-700 shadow-2xl space-y-4">
+            <div class="flex justify-between items-center border-b border-slate-800 pb-3">
+                <h3 class="text-lg font-bold text-white flex items-center gap-2">
+                    ⚙️ Configurar Gemini AI
+                </h3>
+                <button id="closeSettingsBtn" class="text-slate-400 hover:text-white text-lg font-bold">✕</button>
+            </div>
+
+            <p class="text-xs text-slate-400 leading-relaxed">
+                Ingresa tu clave de <strong>Google AI Studio (Gemini)</strong> para habilitar el análisis psicológico avanzado, análisis multimodal de video y procesamiento de sentimiento.
+            </p>
+
+            <div class="space-y-2">
+                <label for="apiKeyInput" class="text-xs uppercase font-semibold text-slate-300 tracking-wider block">Gemini API Key</label>
+                <input 
+                    type="password" 
+                    id="apiKeyInput" 
+                    placeholder="AIzaSy..." 
+                    class="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-white text-sm font-mono focus:outline-none focus:border-cyan-400"
+                />
+                <p class="text-[11px] text-slate-500">
+                    ¿No tienes una clave? Obtén una gratis en <a href="https://aistudio.google.com/app/apikey" target="_blank" class="text-cyan-400 underline">Google AI Studio ↗</a>.
+                </p>
+            </div>
+
+            <div id="apiKeyStatusMsg" class="hidden text-xs p-2.5 rounded-lg text-center"></div>
+
+            <div class="flex gap-2 pt-2">
+                <button id="testApiKeyBtn" class="flex-1 py-2 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-200 transition">
+                    Probar Clave
+                </button>
+                <button id="saveApiKeyBtn" class="flex-1 py-2 px-3 rounded-xl bg-gradient-to-r from-pink-600 to-cyan-600 hover:from-pink-500 hover:to-cyan-500 text-xs font-semibold text-white transition">
+                    Guardar Clave
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL DE ANÁLISIS DE VIDEO INDIVIDUAL -->
+    <div id="videoModal" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="glass-panel max-w-2xl w-full max-h-[90vh] overflow-y-auto rounded-2xl p-6 border border-slate-700 shadow-2xl space-y-4">
+            
+            <div class="flex justify-between items-center border-b border-slate-800 pb-3">
+                <h3 id="videoModalTitle" class="text-base font-bold text-white flex items-center gap-2">
+                    ✨ Análisis de Video con IA
+                </h3>
+                <button id="closeVideoModalBtn" class="text-slate-400 hover:text-white text-lg font-bold">✕</button>
+            </div>
+
+            <!-- Loader -->
+            <div id="videoModalLoading" class="text-center py-10 space-y-3">
+                <div class="inline-block w-10 h-10 border-4 border-cyan-400 border-t-transparent rounded-full animate-spin"></div>
+                <p class="text-xs text-slate-300 font-medium">Analizando narrativa visual, tono y recepción comunitaria...</p>
+            </div>
+
+            <!-- Contenido del Análisis -->
+            <div id="videoModalContent" class="hidden space-y-4">
+                
+                <div class="flex justify-between items-center bg-slate-950 p-3 rounded-xl border border-slate-800 text-xs">
+                    <div>
+                        <span class="text-slate-400 block text-[10px] uppercase">Categoría Temática</span>
+                        <span id="vCategory" class="font-bold text-cyan-400 text-sm"></span>
+                    </div>
+                    <span id="vModelUsed" class="px-2.5 py-1 rounded-full text-[11px] font-mono bg-purple-950 text-purple-300 border border-purple-800">
+                        Gemini AI
+                    </span>
+                </div>
+
+                <div class="space-y-3 text-xs">
+                    <div class="bg-slate-950/60 p-3 rounded-xl border border-slate-800">
+                        <span class="font-bold uppercase tracking-wider text-pink-400 block mb-1">Estilo Visual y de Producción</span>
+                        <p id="vVisual" class="text-slate-300 leading-relaxed"></p>
+                    </div>
+
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div class="bg-slate-950/60 p-3 rounded-xl border border-slate-800">
+                            <span class="font-bold uppercase tracking-wider text-amber-400 block mb-1">Tono Emocional</span>
+                            <p id="vEmotion" class="text-slate-300 leading-relaxed"></p>
+                        </div>
+                        <div class="bg-slate-950/60 p-3 rounded-xl border border-slate-800">
+                            <span class="font-bold uppercase tracking-wider text-emerald-400 block mb-1">Reacción de la Audiencia</span>
+                            <p id="vAudience" class="text-slate-300 leading-relaxed"></p>
+                        </div>
+                    </div>
+
+                    <div class="bg-slate-950/60 p-3 rounded-xl border border-slate-800">
+                        <span class="font-bold uppercase tracking-wider text-cyan-400 block mb-2">Indicios de Personalidad Observados</span>
+                        <div id="vPersonalityCues" class="grid grid-cols-1 sm:grid-cols-3 gap-2"></div>
+                    </div>
+
+                    <div class="bg-slate-950/60 p-3 rounded-xl border border-slate-800">
+                        <span class="font-bold uppercase tracking-wider text-purple-400 block mb-2">Aprendizajes Clave</span>
+                        <ul id="vKeyTakeaways" class="space-y-1.5"></ul>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <!-- SCRIPTS -->
+    <script src="/static/js/api.js"></script>
+    <script src="/static/js/charts.js"></script>
+    <script src="/static/js/app.js"></script>
+</body>
+</html>
