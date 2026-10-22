@@ -1,40 +1,96 @@
+"""
+==============================================================================
+MÓDULO: backend/video_analyzer.py
+PROPÓSITO:
+    Motor de análisis multimodal especializado en publicaciones individuales de TikTok.
+    Evalúa la miniatura visual, la narrativa, el estilo de producción y la recepción
+    de la audiencia para un video en particular.
+
+CÓMO INTERACTÚA CON EL RESTO DEL SISTEMA:
+    1. 'app.py' lo invoca en la ruta POST '/api/analyze-video' cuando el usuario
+       hace clic en el botón '✨ Analizar Video con IA' dentro de una tarjeta de video.
+    2. Utiliza 'httpx' para descargar de forma asíncrona los bytes de la portada/miniatura ('cover_url').
+    3. Si hay API Key de Gemini: convierte la imagen en un 'types.Part.from_bytes'
+       y la envía junto con el prompt a 'generate_content_with_fallback()' de 'analyzer.py'.
+    4. Si NO hay API Key: activa '_analyze_video_heuristic()' clasificando por patrones
+       semánticos y ratios de interacción.
+    5. Retorna 'VideoAnalysisResponse' estructurado para alimentar el modal interactivo de la UI.
+==============================================================================
+"""
+
+# ==============================================================================
+# 1. IMPORTACIÓN DE LIBRERÍAS Y EL PORQUÉ DE CADA UNA
+# ==============================================================================
+
+# 'json' procesa los datos estructurados en formato JSON entre el LLM y la aplicación.
 import json
+
+# 'logging' emite mensajes de advertencia o diagnóstico si falla la descarga de una miniatura.
 import logging
+
+# 're' se encarga de sanear la respuesta textual eliminando posibles bloques markdown.
 import re
+
+# 'typing' proporciona anotaciones estáticas para mayor robustez en los parámetros.
 from typing import Optional, List
+
+# 'httpx' es un cliente HTTP asíncrono de alto rendimiento.
+# ¿POR QUÉ?: Permite descargar las imágenes de portada (miniaturas) de TikTok
+# de forma no bloqueante sin detener el hilo principal de FastAPI.
 import httpx
+
+# Modelos Pydantic para validar la petición y estructurar la respuesta.
 from backend.models import VideoAnalysisRequest, VideoAnalysisResponse
+
+# Configuración de credenciales y modelo predeterminado de Gemini.
 from backend.config import get_gemini_api_key, DEFAULT_GEMINI_MODEL
+
+# Función de fallback automático compartida con 'analyzer.py' para tolerar modelos retirados.
 from backend.analyzer import generate_content_with_fallback
 
+# Logger especializado para este módulo.
 logger = logging.getLogger("scrappy.video_analyzer")
 
 
+# ==============================================================================
+# 2. FUNCIÓN PRINCIPAL DE ANÁLISIS DE VIDEO
+# ==============================================================================
+
 async def analyze_single_video(req: VideoAnalysisRequest) -> VideoAnalysisResponse:
     """
-    Analiza un video específico de TikTok:
-    - Si hay API Key de Gemini: analiza multimodalmente la miniatura/portada del video,
-      la narrativa, tono, recepción del público y rasgos proyectados.
-    - Si no hay API Key: genera un análisis semántico y métrico contextual de respaldo.
+    Coordina la evaluación de un video individual combinando visión artificial y PLN.
+
+    PARÁMETROS:
+        req (VideoAnalysisRequest): Datos del video (id, url, caption, comentarios, portada).
+
+    RETORNO:
+        VideoAnalysisResponse: Desglose con categoría temática, estética visual,
+                               tono emocional y aprendizajes clave.
     """
+    # 1. Comprobamos la disponibilidad de una clave válida de Gemini
     api_key = get_gemini_api_key(req.api_key)
 
+    # Si no hay clave, ejecutamos el analizador heurístico de respaldo
     if not api_key:
         return _analyze_video_heuristic(req)
 
+    # 2. Importación diferida del SDK de Gemini
     from google import genai
     from google.genai import types
 
+    # Muestra representativa de hasta 8 comentarios para que la IA comprenda la reacción del público
     comments_sample = "\n- ".join(req.comments[:8]) if req.comments else "No hay comentarios disponibles."
 
-    # Intentar descargar la imagen de portada/miniatura para análisis multimodal
+    # 3. DESCARGA ASÍNCRONA DE LA MINIATURA / PORTADA MULTIMODAL:
     image_part = None
     if req.cover_url:
         try:
+            # Descargamos los bytes de la imagen con timeout de 10 segundos
             async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
                 img_res = await client.get(req.cover_url)
                 if img_res.status_code == 200:
                     content_type = img_res.headers.get("content-type", "image/jpeg").split(";")[0]
+                    # Construimos la parte multimodal binaria compatible con Gemini
                     image_part = types.Part.from_bytes(
                         data=img_res.content,
                         mime_type=content_type
@@ -42,6 +98,7 @@ async def analyze_single_video(req: VideoAnalysisRequest) -> VideoAnalysisRespon
         except Exception as e:
             logger.warning(f"No se pudo descargar la miniatura del video {req.video_id}: {e}")
 
+    # 4. PROMPT ESPECIALIZADO EN ANÁLISIS DE CONTENIDO VERTICAL:
     prompt = f"""
 Eres un analista de contenido digital y psicología de redes sociales.
 Analiza este video de TikTok:
@@ -82,10 +139,13 @@ Devuelve EXCLUSIVAMENTE un JSON con esta estructura exacta:
 """
 
     client = genai.Client(api_key=api_key)
+    
+    # Creamos el contenedor de contenidos: texto + imagen (si se descargó exitosamente)
     contents = [prompt]
     if image_part:
         contents.append(image_part)
 
+    # 5. INFERENCIA CON GESTIÓN DE FALLBACK DE MODELOS:
     response, used_model = generate_content_with_fallback(
         client=client,
         contents=contents,
@@ -97,12 +157,14 @@ Devuelve EXCLUSIVAMENTE un JSON con esta estructura exacta:
     )
 
     res_text = response.text.strip()
+    # Limpieza preventiva de bloques markdown ```json
     if res_text.startswith("```"):
         res_text = re.sub(r"^```(?:json)?\n?", "", res_text)
         res_text = re.sub(r"\n?```$", "", res_text)
 
     data = json.loads(res_text)
 
+    # 6. Retorno de la respuesta validada con Pydantic
     return VideoAnalysisResponse(
         video_id=req.video_id,
         topic_category=data.get("topic_category", "General"),
@@ -115,14 +177,23 @@ Devuelve EXCLUSIVAMENTE un JSON con esta estructura exacta:
     )
 
 
+# ==============================================================================
+# 3. ANÁLISIS HEURÍSTICO LOCAL DE RESPALDO (SIN API KEY)
+# ==============================================================================
+
 def _analyze_video_heuristic(req: VideoAnalysisRequest) -> VideoAnalysisResponse:
     """
-    Análisis heurístico de respaldo cuando no hay Gemini API Key configurada.
+    Genera un informe semántico local y contextual en caso de no disponer de API Key.
+
+    ¿POR QUÉ EXISTE?:
+        Permite al usuario presionar '✨ Analizar Video con IA' en la interfaz
+        y recibir un desglose coherente basado en palabras clave y métricas
+        sin experimentar cuelgues ni errores de servidor.
     """
     desc = (req.description or "").lower()
     comments_str = " ".join(req.comments).lower()
 
-    # Detectar categoría por palabras clave
+    # Clasificación temática basada en vocabulario contextual
     if any(k in desc for k in ["tutorial", "aprende", "como", "tips", "hacks", "guia"]):
         category = "Educativo / Tutorial"
     elif any(k in desc for k in ["humor", "risa", "meme", "broma", "pov", "jaja"]):
@@ -134,7 +205,7 @@ def _analyze_video_heuristic(req: VideoAnalysisRequest) -> VideoAnalysisResponse
     else:
         category = "Contenido General / Opinión"
 
-    # Tono emocional
+    # Inferencia del tono emocional
     if any(k in desc or k in comments_str for k in ["increible", "genial", "top", "gracias"]):
         tone = "Inspirador y Positivo"
     elif any(k in desc or k in comments_str for k in ["alerta", "cuidado", "secreto", "ojo"]):
