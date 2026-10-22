@@ -69,9 +69,6 @@ Cada tarjeta de video en el dashboard incluye el botón **✨ Analizar Video con
 ### ¿Qué se necesita para analizar los videos? ¿Es necesaria la API Key de Gemini?
 **Sí, la API Key de Google Gemini es la opción ideal y recomendada al 100%**.
 
-#### Aclaración sobre el archivo `prueba.txt` (`damo-vilab/text-to-video-ms-1.7b`):
-El código en `prueba.txt` corresponde a un modelo de Hugging Face para **generar videos a partir de texto mediante difusión** (*Text-to-Video Synthesis*), **no** para analizar ni comprender videos existentes.
-
 #### ¿Por qué Gemini y no modelos de visión locales pesados?
 1. **Modelos locales de visión/video (como Video-LLaMA o LLaVA-Video):**
    - Requieren descargar entre 8 GB y 20 GB de pesos.
