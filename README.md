@@ -36,7 +36,42 @@ Scrappy-Tiktok/
 
 ---
 
-## 🚀 Nuevas Funcionalidades
+## 📚 Librerías Utilizadas y su Rol en el Código
+
+### 1. Backend (Python)
+
+| Librería | Paquete | Rol y Utilidad en el Código |
+| :--- | :--- | :--- |
+| **FastAPI** | `fastapi` | Framework web de alto rendimiento. En [backend/app.py](file:///backend/app.py) gestiona el router de endpoints REST (`/api/scrape`, `/api/analyze-video`, etc.), documentación OpenAPI automática (`/docs`), validación de parámetros de consulta (`Query`) y entrega del frontend estático. |
+| **Uvicorn** | `uvicorn` | Servidor ASGI ultrarrápido sobre el que corre FastAPI. En [run.py](file:///run.py) inicializa el proceso con recarga en caliente (`reload=True`), permitiendo actualizar el código en vivo sin reiniciar manualmente el servidor. |
+| **Playwright** | `playwright.async_api` | Motor de automatización del navegador Chromium. En [backend/scraper.py](file:///backend/scraper.py) simula un usuario real, sortea detecciones antibot, intercepta paquetes de red JSON (`/api/post/item_list` y `/api/comment/list`) y extrae los datos de hidratación del DOM de TikTok. |
+| **Pydantic** | `pydantic` (`BaseModel`, `Field`) | Tipado estático y validación estricta de datos. En [backend/models.py](file:///backend/models.py) modela las entidades `ProfileData`, `VideoData`, `BigFiveTrait`, etc., asegurando que las puntuaciones estén entre 0 y 100 y serializando automáticamente entre diccionarios de Python y JSON. |
+| **Google GenAI SDK** | `google-genai` | SDK oficial de Google para Gemini AI. En [backend/analyzer.py](file:///backend/analyzer.py) y [backend/video_analyzer.py](file:///backend/video_analyzer.py) orquesta los prompts psicométricos con salida estructurada JSON (`response_mime_type="application/json"`), rota modelos ante caídas de red y analiza imágenes multimodales con `types.Part.from_bytes`. |
+| **HTTPX** | `httpx` | Cliente HTTP asíncrono no bloqueante. En [backend/video_analyzer.py](file:///backend/video_analyzer.py) descarga los bytes de las imágenes de portada/miniatura de TikTok en segundo plano para enviarlas como entrada visual al modelo multimodal. |
+| **Python-Dotenv** | `python-dotenv` | Gestor de configuración mediante archivos de entorno. En [backend/config.py](file:///backend/config.py) lee automáticamente credenciales y parámetros desde `.env` o `.env.example` sin exponer datos sensibles en el código fuente. |
+
+#### Librerías de la Biblioteca Estándar de Python
+
+- **`asyncio`**: Controla la asincronía y el bucle de eventos. Permite aislar Playwright en un `ProactorEventLoop` dedicado en Windows (`run_scraper_in_proactor`) y ejecutar tareas pesadas en hilos independientes con `asyncio.to_thread`.
+- **`pathlib.Path`**: Maneja rutas de archivos de manera agnóstica al sistema operativo, garantizando compatibilidad entre Windows (`\`) y Linux/macOS (`/`).
+- **`re`**: Expresiones regulares para tokenizar el vocabulario en el analizador heurístico local y limpiar bloques de formato markdown (` ```json `).
+- **`json`**: Parseo y deserialización de las respuestas estructuradas de los modelos de IA y de los scripts de hidratación de TikTok.
+- **`logging`**: Registro de eventos, advertencias y diagnósticos en consola durante el scraping y las inferencias.
+- **`sys`**: Inspecciona el sistema operativo subyacente para aplicar configuraciones preventivas en Windows (`win32`).
+
+---
+
+### 2. Frontend (Interfaz Web)
+
+| Librería / Tecnología | Tipo | Rol y Utilidad en el Código |
+| :--- | :--- | :--- |
+| **Tailwind CSS** | CDN | Framework CSS utilitario. Proporciona el diseño Dark Mode (estilo TikTok), efectos *glassmorphism*, bordes con gradientes neón, grilla responsiva para móviles y escritorios, y animaciones de carga. |
+| **Chart.js** | CDN | Motor de renderizado de gráficos vectoriales interactivos sobre HTML5 `<canvas>`.<br>• **Gráfico Radar (Spider Chart):** En [frontend/static/js/charts.js](file:///frontend/static/js/charts.js) representa visualmente las 5 dimensiones de personalidad OCEAN (Apertura, Responsabilidad, Extraversión, Amabilidad, Neuroticismo) en una escala de 0 a 100 con gradiente cyan/pink.<br>• **Gráfico de Rosquilla (Doughnut Chart):** Ilustra el desglose porcentual de sensibilidad comunitaria (% positivo, neutro, negativo). |
+| **JavaScript Vanilla (ES6+)** | Nativo | Lógica modular desacoplada del frontend:<br>• `api.js`: Cliente HTTP centralizado para consumir endpoints REST con `fetch`.<br>• `charts.js`: Control del ciclo de vida de los gráficos (destrucción de instancias previas para evitar memory leaks).<br>• `app.js`: Estado reactivo, persistencia en `localStorage`, control de modales y sanitización contra inyecciones XSS. |
+
+---
+
+## 🚀 Funcionalidades Principales
 
 ### 1. Modelo de Personalidad Big Five (OCEAN)
 A partir de los datos extraídos del creador (biografía, métricas sociales, descripciones de sus videos, uso de hashtags, vocabulario y tono de los comentarios de su comunidad), el sistema evalúa los 5 grandes factores de la personalidad (puntuación de 0 a 100):
@@ -74,8 +109,8 @@ Cada tarjeta de video en el dashboard incluye el botón **✨ Analizar Video con
    - Requieren descargar entre 8 GB y 20 GB de pesos.
    - Exigen tarjetas gráficas dedicadas de gama alta con al menos **16 GB a 24 GB de VRAM**.
    - Son extremadamente lentos en computadoras convencionales.
-2. **Google Gemini (Gemini 2.5 Flash / 1.5 Flash):**
-   - Es multimodal nativo (procesa imágenes, portadas, audio y texto simultáneamente con ventana de 1 millón de tokens).
+2. **Google Gemini (Gemini 3.5 Flash / 3.5 Flash Lite):**
+   - Es multimodal nativo (procesa imágenes, portadas, audio y texto simultáneamente con ventana de contexto extendida).
    - Su API es **100% gratuita** en su capa estándar de desarrollo en [Google AI Studio](https://aistudio.google.com/app/apikey).
    - No consume recursos locales de GPU ni disco duro.
 
@@ -93,7 +128,7 @@ Si no configuras la clave de Gemini, el sistema utiliza un motor de análisis li
 
 ### Paso 1: Clonar o Descargar el Proyecto
 ```bash
-git clone <url-del-repositorio>
+git clone https://github.com/AndyA14/Scrappy-Tiktok.git
 cd Scrappy-Tiktok
 ```
 
@@ -123,7 +158,8 @@ cp .env.example .env
 ```
 Edita `.env` y coloca tu clave de Gemini:
 ```env
-GEMINI_API_KEY=AIzaSy...
+GEMINI_API_KEY=tu_clave_aqui
+GEMINI_MODEL=gemini-3.5-flash-lite
 ```
 *(Nota: También puedes ingresar o cambiar tu API Key directamente desde el botón **⚙️ Configuración** en la interfaz web sin editar ningún archivo).*
 
