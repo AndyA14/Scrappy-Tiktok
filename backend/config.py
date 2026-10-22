@@ -12,7 +12,7 @@ PORT = int(os.getenv("PORT", "8000"))
 
 # Configuración de Gemini AI
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
-DEFAULT_GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+DEFAULT_GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
 
 # Configuración del Scraper
 DEFAULT_MAX_VIDEOS = int(os.getenv("DEFAULT_MAX_VIDEOS", "10"))

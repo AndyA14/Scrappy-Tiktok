@@ -5,6 +5,7 @@ from typing import Optional, List
 import httpx
 from backend.models import VideoAnalysisRequest, VideoAnalysisResponse
 from backend.config import get_gemini_api_key, DEFAULT_GEMINI_MODEL
+from backend.analyzer import generate_content_with_fallback
 
 logger = logging.getLogger("scrappy.video_analyzer")
 
@@ -85,27 +86,15 @@ Devuelve EXCLUSIVAMENTE un JSON con esta estructura exacta:
     if image_part:
         contents.append(image_part)
 
-    model_name = DEFAULT_GEMINI_MODEL
-    try:
-        response = client.models.generate_content(
-            model=model_name,
-            contents=contents,
-            config=types.GenerateContentConfig(
-                response_mime_type="application/json",
-                temperature=0.2,
-            )
-        )
-    except Exception as e:
-        logger.warning(f"Error con modelo {model_name} en video: {e}. Reintentando con gemini-1.5-flash")
-        model_name = "gemini-1.5-flash"
-        response = client.models.generate_content(
-            model=model_name,
-            contents=contents,
-            config=types.GenerateContentConfig(
-                response_mime_type="application/json",
-                temperature=0.2,
-            )
-        )
+    response, used_model = generate_content_with_fallback(
+        client=client,
+        contents=contents,
+        config=types.GenerateContentConfig(
+            response_mime_type="application/json",
+            temperature=0.2,
+        ),
+        preferred_model=DEFAULT_GEMINI_MODEL
+    )
 
     res_text = response.text.strip()
     if res_text.startswith("```"):
@@ -122,7 +111,7 @@ Devuelve EXCLUSIVAMENTE un JSON con esta estructura exacta:
         audience_reaction=data.get("audience_reaction", "Interacción estándar de la comunidad."),
         personality_cues=data.get("personality_cues", {}),
         key_takeaways=data.get("key_takeaways", []),
-        model_used=f"Google Gemini AI ({model_name})"
+        model_used=f"Google Gemini AI ({used_model})"
     )
 
 
