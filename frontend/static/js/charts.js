@@ -1,13 +1,36 @@
 /**
- * Scrappy TikTok - Charts Manager (Chart.js)
+ * ==============================================================================
+ * MÓDULO: frontend/static/js/charts.js
+ * PROPÓSITO:
+ *     Controlador y renderizador visual de gráficos interactivos utilizando Chart.js.
+ *
+ * CÓMO INTERACTÚA CON EL RESTO DEL SISTEMA:
+ *     1. 'app.js' invoca 'ChartsManager.renderBigFiveRadar()' para plasmar
+ *        la huella de personalidad OCEAN en el canvas principal del dashboard.
+ *     2. 'app.js' invoca 'ChartsManager.renderSentimentDoughnut()' para graficar
+ *        el porcentaje de positividad/negatividad comunitaria.
+ *     3. Controla el ciclo de vida de los objetos 'Chart', destruyendo las instancias
+ *        previas antes de redibujar para prevenir parpadeos o fugas de memoria en el navegador.
+ * ==============================================================================
  */
 
+// Variables locales que retienen las instancias activas de Chart.js
 let bigFiveRadarChart = null;
 let sentimentDoughnutChart = null;
 
 const ChartsManager = {
     /**
-     * Dibuja o actualiza el gráfico radial (Radar / Spider) del Big Five (OCEAN)
+     * Dibuja o actualiza el gráfico radial (Radar / Spider Chart) de los Cinco Grandes (OCEAN).
+     *
+     * PARÁMETROS:
+     *     canvasId (string): El atributo 'id' del elemento <canvas> en el HTML ('bigFiveRadarChart').
+     *     analysis (BigFiveAnalysis): Objeto que contiene las 5 puntuaciones psicométricas (0 a 100).
+     *
+     * CARACTERÍSTICAS VISUALES:
+     *     - Escala fija de 0 a 100 con divisiones cada 20 puntos.
+     *     - Relleno con gradiente de color dual (Rosa Neón #ec4899 a Cyan Eléctrico #06b6d4).
+     *     - Tooltips informativos estilizados en modo oscuro.
+     *     - Animación suave 'easeOutQuart' de 1.2 segundos.
      */
     renderBigFiveRadar(canvasId, analysis) {
         const canvas = document.getElementById(canvasId);
@@ -15,23 +38,26 @@ const ChartsManager = {
 
         const ctx = canvas.getContext('2d');
 
+        // Si ya existía un gráfico en este canvas, lo destruimos para evitar colisiones
         if (bigFiveRadarChart) {
             bigFiveRadarChart.destroy();
         }
 
+        // Extracción de las 5 dimensiones en orden estándar OCEAN
         const scores = [
-            analysis.openness.score,
-            analysis.conscientiousness.score,
-            analysis.extraversion.score,
-            analysis.agreeableness.score,
-            analysis.neuroticism.score
+            analysis.openness.score,          // O: Apertura
+            analysis.conscientiousness.score, // C: Responsabilidad
+            analysis.extraversion.score,      // E: Extraversión
+            analysis.agreeableness.score,     // A: Amabilidad
+            analysis.neuroticism.score        // N: Neuroticismo
         ];
 
-        // Crear gradiente estilizado para el área del radar
+        // Creación del gradiente visual acorde al tema Dark Mode de TikTok
         const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height || 350);
-        gradient.addColorStop(0, 'rgba(236, 72, 153, 0.45)');   // Pink
+        gradient.addColorStop(0, 'rgba(236, 72, 153, 0.45)');   // Rosa
         gradient.addColorStop(1, 'rgba(6, 182, 212, 0.25)');   // Cyan
 
+        // Construcción del gráfico de tipo Radar
         bigFiveRadarChart = new Chart(ctx, {
             type: 'radar',
             data: {
@@ -65,7 +91,7 @@ const ChartsManager = {
                 },
                 plugins: {
                     legend: {
-                        display: false
+                        display: false // Ocultamos la leyenda para una apariencia más limpia
                     },
                     tooltip: {
                         backgroundColor: 'rgba(15, 23, 42, 0.95)',
@@ -111,7 +137,16 @@ const ChartsManager = {
     },
 
     /**
-     * Dibuja o actualiza el gráfico de rosquilla para la distribución de sentimiento
+     * Dibuja o actualiza el gráfico de rosquilla (Doughnut Chart) de sentimiento comunitario.
+     *
+     * PARÁMETROS:
+     *     canvasId (string): El atributo 'id' del elemento <canvas> en el HTML ('sentimentDoughnutChart').
+     *     sentiment (SentimentAnalysis): Objeto con el desglose { positive, neutral, negative }.
+     *
+     * CARACTERÍSTICAS VISUALES:
+     *     - Código de colores intuitivo: Verde (#10b981) para positivo, Pizarra (#64748b) para neutro, Rojo (#ef4444) para crítico.
+     *     - Centro hueco al 72% ('cutout') para una estética de anillo moderno.
+     *     - Leyenda inferior alineada con viñetas circulares.
      */
     renderSentimentDoughnut(canvasId, sentiment) {
         const canvas = document.getElementById(canvasId);
@@ -119,10 +154,12 @@ const ChartsManager = {
 
         const ctx = canvas.getContext('2d');
 
+        // Destrucción de instancia previa si existe
         if (sentimentDoughnutChart) {
             sentimentDoughnutChart.destroy();
         }
 
+        // Extracción de porcentajes con respaldo por defecto
         const b = sentiment.breakdown || { positive: 60, neutral: 30, negative: 10 };
 
         sentimentDoughnutChart = new Chart(ctx, {
@@ -132,9 +169,9 @@ const ChartsManager = {
                 datasets: [{
                     data: [b.positive, b.neutral, b.negative],
                     backgroundColor: [
-                        '#10b981', // Verde esmeralda
-                        '#64748b', // Pizarra
-                        '#ef4444'  // Rojo
+                        '#10b981', // Verde esmeralda (aprobación)
+                        '#64748b', // Pizarra (neutralidad/informativo)
+                        '#ef4444'  // Rojo (crítica/controversia)
                     ],
                     borderColor: '#111827',
                     borderWidth: 3,
@@ -169,4 +206,5 @@ const ChartsManager = {
     }
 };
 
+// Registramos el gestor en el ámbito global del navegador
 window.ChartsManager = ChartsManager;
