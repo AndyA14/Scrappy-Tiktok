@@ -2,9 +2,15 @@ import os
 from pathlib import Path
 from dotenv import load_dotenv
 
-# Cargar variables de entorno desde el archivo .env si existe
+# Cargar variables de entorno desde el archivo .env si existe, o desde .env.example
 BASE_DIR = Path(__file__).resolve().parent.parent
-load_dotenv(BASE_DIR / ".env")
+env_path = BASE_DIR / ".env"
+if env_path.exists():
+    load_dotenv(env_path)
+else:
+    example_path = BASE_DIR / ".env.example"
+    if example_path.exists():
+        load_dotenv(example_path)
 
 # Configuración del servidor
 HOST = os.getenv("HOST", "127.0.0.1")
@@ -12,7 +18,7 @@ PORT = int(os.getenv("PORT", "8000"))
 
 # Configuración de Gemini AI
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
-DEFAULT_GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+DEFAULT_GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite")
 
 # Configuración del Scraper
 DEFAULT_MAX_VIDEOS = int(os.getenv("DEFAULT_MAX_VIDEOS", "10"))

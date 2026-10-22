@@ -15,14 +15,12 @@ logger = logging.getLogger("scrappy.analyzer")
 
 # Modelos candidatos de Gemini en orden de prioridad para fallback automático
 CANDIDATE_MODELS = [
-    "gemini-2.0-flash",
-    "gemini-1.5-flash",
-    "gemini-1.5-flash-latest",
-    "gemini-1.5-flash-001",
-    "gemini-1.5-flash-002",
-    "gemini-2.0-flash-exp",
-    "gemini-1.5-pro",
-    "gemini-1.5-pro-latest"
+    "gemini-3.5-flash",
+    "gemini-3.5-flash-lite",
+    "gemini-3.8-flash",
+    "gemini-flash-latest",
+    "gemini-3.1-flash-lite",
+    "gemini-pro-latest"
 ]
 
 _cached_working_model: str | None = None
@@ -31,8 +29,8 @@ _cached_working_model: str | None = None
 def generate_content_with_fallback(client, contents, config=None, preferred_model: str | None = None):
     """
     Intenta generar contenido probando modelos compatibles de Gemini.
-    Si un modelo responde 404 NOT_FOUND, prueba automáticamente los siguientes candidatos
-    o los modelos disponibles reportados por client.models.list().
+    Si un modelo responde 404 (no encontrado / retirado) o 503 (alta demanda),
+    prueba automáticamente los siguientes candidatos compatibles.
     """
     global _cached_working_model
 
@@ -43,15 +41,6 @@ def generate_content_with_fallback(client, contents, config=None, preferred_mode
         models_to_try.append(preferred_model)
     if DEFAULT_GEMINI_MODEL and DEFAULT_GEMINI_MODEL not in models_to_try:
         models_to_try.append(DEFAULT_GEMINI_MODEL)
-
-    # Intentar descubrir modelos habilitados para esta API Key
-    try:
-        for m in client.models.list():
-            m_id = m.name.replace("models/", "") if m.name else ""
-            if "gemini" in m_id.lower() and m_id not in models_to_try:
-                models_to_try.append(m_id)
-    except Exception as ex:
-        logger.debug(f"Aviso al listar modelos: {ex}")
 
     for cand in CANDIDATE_MODELS:
         if cand not in models_to_try:
@@ -70,13 +59,10 @@ def generate_content_with_fallback(client, contents, config=None, preferred_mode
             return response, model_name
         except Exception as e:
             err_str = str(e)
-            logger.warning(f"Error con modelo {model_name}: {err_str[:90]}")
+            logger.warning(f"Aviso con modelo {model_name}: {err_str[:90]}")
             last_error = e
-            # Si el modelo no existe (404), intentamos el siguiente de la lista
-            if "404" in err_str or "NOT_FOUND" in err_str:
-                continue
-            # Para errores de credenciales (400) o cuota (429), propagamos el error directamente
-            raise e
+            # Continuar con el siguiente candidato si este falló
+            continue
 
     if last_error:
         raise last_error
