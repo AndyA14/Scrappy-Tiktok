@@ -13,6 +13,61 @@ from backend.config import get_gemini_api_key, DEFAULT_GEMINI_MODEL
 
 logger = logging.getLogger("scrappy.analyzer")
 
+# Modelos candidatos de Gemini en orden de prioridad para fallback automático
+CANDIDATE_MODELS = [
+    "gemini-3.5-flash",
+    "gemini-3.5-flash-lite",
+    "gemini-3.8-flash",
+    "gemini-flash-latest",
+    "gemini-3.1-flash-lite",
+    "gemini-pro-latest"
+]
+
+_cached_working_model: str | None = None
+
+
+def generate_content_with_fallback(client, contents, config=None, preferred_model: str | None = None):
+    """
+    Intenta generar contenido probando modelos compatibles de Gemini.
+    Si un modelo responde 404 (no encontrado / retirado) o 503 (alta demanda),
+    prueba automáticamente los siguientes candidatos compatibles.
+    """
+    global _cached_working_model
+
+    models_to_try = []
+    if _cached_working_model and _cached_working_model not in models_to_try:
+        models_to_try.append(_cached_working_model)
+    if preferred_model and preferred_model not in models_to_try:
+        models_to_try.append(preferred_model)
+    if DEFAULT_GEMINI_MODEL and DEFAULT_GEMINI_MODEL not in models_to_try:
+        models_to_try.append(DEFAULT_GEMINI_MODEL)
+
+    for cand in CANDIDATE_MODELS:
+        if cand not in models_to_try:
+            models_to_try.append(cand)
+
+    last_error = None
+    for model_name in models_to_try:
+        try:
+            logger.info(f"Probando llamada con modelo Gemini: {model_name}")
+            response = client.models.generate_content(
+                model=model_name,
+                contents=contents,
+                config=config
+            )
+            _cached_working_model = model_name
+            return response, model_name
+        except Exception as e:
+            err_str = str(e)
+            logger.warning(f"Aviso con modelo {model_name}: {err_str[:90]}")
+            last_error = e
+            # Continuar con el siguiente candidato si este falló
+            continue
+
+    if last_error:
+        raise last_error
+    raise RuntimeError("No se encontró ningún modelo de Gemini disponible para la clave proporcionada.")
+
 # Lexicon básico bilingüe (Español / Inglés) para análisis heurístico de respaldo
 POSITIVE_WORDS = {
     "excelente", "bueno", "increible", "genial", "amor", "feliz", "gracias",
@@ -254,28 +309,15 @@ Devuelve ÚNICAMENTE un objeto JSON válido con este formato exacto:
 
     client = genai.Client(api_key=api_key)
 
-    # Probamos con el modelo recomendado por defecto
-    model_name = DEFAULT_GEMINI_MODEL
-    try:
-        response = client.models.generate_content(
-            model=model_name,
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                response_mime_type="application/json",
-                temperature=0.2,
-            )
-        )
-    except Exception as e:
-        logger.warning(f"Error con modelo {model_name}: {e}. Intentando con 'gemini-1.5-flash'")
-        model_name = "gemini-1.5-flash"
-        response = client.models.generate_content(
-            model=model_name,
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                response_mime_type="application/json",
-                temperature=0.2,
-            )
-        )
+    response, used_model = generate_content_with_fallback(
+        client=client,
+        contents=prompt,
+        config=types.GenerateContentConfig(
+            response_mime_type="application/json",
+            temperature=0.2,
+        ),
+        preferred_model=DEFAULT_GEMINI_MODEL
+    )
 
     response_text = response.text.strip()
     # Limpieza preventiva en caso de que venga con bloques markdown ```json
@@ -301,7 +343,7 @@ Devuelve ÚNICAMENTE un objeto JSON válido con este formato exacto:
             dominant_emotions=data["sentiment"].get("dominant_emotions", []),
             community_tone=data["sentiment"].get("community_tone", "")
         ),
-        model_used=f"Google Gemini AI ({model_name})"
+        model_used=f"Google Gemini AI ({used_model})"
     )
 
 

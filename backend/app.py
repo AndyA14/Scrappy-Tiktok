@@ -17,7 +17,7 @@ from backend.models import (
     VideoAnalysisResponse,
 )
 from backend.scraper import run_scraper_in_proactor
-from backend.analyzer import perform_bigfive_analysis
+from backend.analyzer import perform_bigfive_analysis, generate_content_with_fallback
 from backend.video_analyzer import analyze_single_video
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -76,15 +76,15 @@ async def test_gemini_key(payload: dict):
     try:
         from google import genai
         client = genai.Client(api_key=key)
-        # Prueba de generación ligera
-        res = client.models.generate_content(
-            model="gemini-2.5-flash",
+        # Prueba de generación con resolución automática de modelo compatible
+        res, used_model = generate_content_with_fallback(
+            client=client,
             contents="Responde solo 'OK' para verificar la conexión.",
         )
         return {
             "valid": True,
-            "message": "¡API Key de Gemini verificada y operativa!",
-            "model": "gemini-2.5-flash"
+            "message": f"¡API Key de Gemini verificada y operativa con modelo '{used_model}'!",
+            "model": used_model
         }
     except Exception as e:
         return {
